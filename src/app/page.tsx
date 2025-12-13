@@ -3,9 +3,14 @@ import { api } from "@/lib/eden";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUsername } from "@/hooks/use-usename";
+import { Suspense } from "react";
 
+const Page =() => {
+  return <Suspense><Home/></Suspense>
 
-export default function Home() {
+} 
+export default Page;
+ function Home() {
   const {username} = useUsername()
   const router = useRouter()
   
