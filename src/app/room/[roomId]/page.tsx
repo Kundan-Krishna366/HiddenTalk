@@ -1,7 +1,10 @@
 "use client";
+import { api } from "@/lib/eden";
+import { useMutation } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useRef } from "react";
+import { useUsername } from "@/hooks/use-usename";
 
 
 function formatTimeRemaining(seconds: number){
@@ -15,10 +18,20 @@ const Page =() => {
 
   const params = useParams();
   const roomId = params.roomId as string
+  const {username} = useUsername()
   const [input,setInput] = useState("")
   const inputRef = useRef<HTMLInputElement>(null);
   const [copyStatus,setCopyStatus] = useState("Copy")
   const [timeRemaining,setTimeRemaining] = useState< number | null >(null)
+  
+  const {} = useMutation({
+    mutationFn: async ({text}:{text:string}) => {
+      await api.messages.post({
+        sender: username,text},{query: { roomId }} )
+    }
+  })
+
+
   const copyLink = () => {
     const url = window.location.href
     navigator.clipboard.writeText(url)

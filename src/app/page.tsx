@@ -1,46 +1,14 @@
 "use client";
 import { api } from "@/lib/eden";
 import { useMutation } from "@tanstack/react-query";
-import { nanoid } from "nanoid";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { useUsername } from "@/hooks/use-usename";
 
-const THEBOYS = [
-  "Hank",
-  "BillyButcher",
-  "Mother's Milk",
-  "Frenchie",
-  "Kimiko",
-  "A-Train",
-  "The Deep",
-  "Starlight",
-  "Homelander",
-  "Black Noir",
-];
-const STORAGE_KEY = "chat_username"
-
-const generateUsername = () => {
-   const name = THEBOYS[Math.floor(Math.random() * THEBOYS.length)]
-   return `anonymous-${name}-${nanoid(3)}`
-}
 
 export default function Home() {
-  const [username, setUsername] = useState("");
+  const {username} = useUsername()
   const router = useRouter()
-  useEffect(() => {
-    const main = () =>{
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored){
-        setUsername(stored)
-        return
-      }
-      const generated = generateUsername()
-      localStorage.setItem(STORAGE_KEY,generated)
-      setUsername(generated)
-    }
-    main();
-  },[])
+  
 
   const {mutate: createRoom} = useMutation({
     mutationFn:async()=>{

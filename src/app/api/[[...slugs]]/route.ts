@@ -4,6 +4,7 @@ import { redis } from '@/lib/redis'
 import { authMiddleware } from './auth'
 import { z } from 'zod'
 import { send } from 'process'
+import { Message, realtime } from '@/lib/realtime'
 const rooms = new Elysia({prefix:"/room"}).post("/", async()=>{
     const roomId = nanoid()
 
@@ -25,6 +26,29 @@ const messages = new Elysia({prefix:"/messages"})
     if(!roomExists){
         throw new Error("Room does not exist")
     }
+
+    const message: Message ={
+        id: nanoid(),
+        sender,
+        text,
+        timestamp: Date.now(),
+        roomId
+    }
+
+    await redis.rpush(`messages:${roomId}`,{...message, token: auth.token})
+    await realtime.channel(roomId).emit("chat.message",message)
+    
+    const remaining = await redis.ttl(`meta:${roomId}`)
+    //30 minutes expiry
+
+
+
+
+
+    await redis.expire(`messages:${roomId}`,remaining)
+    await redis.expire(`history:${roomId}`,remaining)
+    await redis.expire("roomId",remaining)
+
 },
     {
     query: z.object({
