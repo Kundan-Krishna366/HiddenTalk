@@ -1,7 +1,7 @@
 "use client";
 import { api } from "@/lib/eden";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useRef } from "react";
 import { useUsername } from "@/hooks/use-usename";
@@ -19,6 +19,7 @@ const Page =() => {
 
   const params = useParams();
   const roomId = params.roomId as string
+  const router = useRouter()
   const {username} = useUsername()
   const [input,setInput] = useState("")
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +38,7 @@ const Page =() => {
     mutationFn: async ({text}:{text:string}) => {
       await api.messages.post({
         sender: username,text},{query: { roomId }} )
+      setInput("")
     }
   })
   
@@ -46,6 +48,9 @@ const Page =() => {
     onData:({event})=>{
       if(event==="chat.message"){
         refetch()
+      }
+      if(event==="chat.destroy"){
+        router.push("/?destroyed=true")
       }
     }
   })
