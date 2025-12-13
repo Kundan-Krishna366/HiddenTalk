@@ -21,7 +21,7 @@ if(existingTokens && meta.connected.includes(existingTokens)){
     return NextResponse.next()
 }
 
-if(meta.connected.length>=5){
+if(meta.connected.length>=3){
     return NextResponse.redirect(new URL("/?error=room-full",req.url))
 }
 
