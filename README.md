@@ -7,6 +7,12 @@ Built using **Next.js, ElysiaJS, Redis (Upstash), and Vercel**.
 
 ---
 
+## Live Demo
+
+https://hiddentalk.vercel.app/
+
+---
+
 ## Features
 
 -**Anonymous chat** – no sign-in or account required  
