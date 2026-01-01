@@ -1,9 +1,8 @@
 "use client";
 import { api } from "@/lib/eden";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useUsername } from "@/hooks/use-usename";
 import { format } from "date-fns";
 import { useRealtime } from "@/lib/realtime-client";
@@ -14,17 +13,35 @@ function formatTimeRemaining(seconds: number){
   return `${mins}:${secs.toString().padStart(2,'0')}`;
 }
 
-
 const Page =() => {
-
   const params = useParams();
   const roomId = params.roomId as string
   const router = useRouter()
+  const queryClient = useQueryClient()
   const {username} = useUsername()
   const [input,setInput] = useState("")
   const inputRef = useRef<HTMLInputElement>(null);
   const [copyStatus,setCopyStatus] = useState("Copy")
   const [timeRemaining,setTimeRemaining] = useState< number | null >(null)
+  
+  // FIX: Add refs to prevent duplicate submissions
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const lastSubmitTime = useRef(0)
+
+  // FIX: Auto-focus input on mount
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [])
+
+  // FIX: Auto-focus input when submission completes
+useEffect(() => {
+  if (!isSubmitting && inputRef.current) {
+    inputRef.current.focus()
+  }
+}, [isSubmitting])
+
 
   const {data: ttlData } = useQuery({
     queryKey: ["ttl",roomId],
@@ -59,29 +76,70 @@ const Page =() => {
     return () => clearInterval(interval)
   }, [timeRemaining, router])
 
-
-  const {data:messages,refetch} = useQuery({
+  const {data:messages} = useQuery({
     queryKey: ["messages",roomId],
     queryFn: async () => {
       const res = await api.messages.get({query:{roomId}})
       return res.data
-    }
+    },
+    // FIX: Don't auto-refetch, rely on realtime updates
+    refetchInterval: false,
+    staleTime: Infinity
   })
   
-  const {mutate: sendMessage,isPending} = useMutation({
+  // FIX: Optimized mutation with proper state management
+  const {mutate: sendMessage} = useMutation({
     mutationFn: async ({text}:{text:string}) => {
-      await api.messages.post({
-        sender: username,text},{query: { roomId }} )
-      setInput("")
-    }
+      const res = await api.messages.post({
+        sender: username,
+        text
+      },{query: { roomId }})
+      return res.data
+    },
+    onMutate: async (newMessage) => {
+      // FIX: Optimistic update
+      const optimisticMessage = {
+        id: `temp-${Date.now()}`,
+        sender: username,
+        text: newMessage.text,
+        timestamp: Date.now(),
+        roomId,
+        token: 'current'
+      }
+      
+      queryClient.setQueryData(["messages", roomId], (old: any) => ({
+        messages: [...(old?.messages || []), optimisticMessage]
+      }))
+      
+      return { optimisticMessage }
+    },
+    onSuccess: () => {
+  setInput("")
+  setIsSubmitting(false)
+},
+onError: (error, variables, context) => {
+  queryClient.setQueryData(["messages", roomId], (old: any) => ({
+    messages: old?.messages.filter((m: any) => m.id !== context?.optimisticMessage.id) || []
+  }))
+  setIsSubmitting(false)
+}
+
   })
   
+  // FIX: Use realtime for instant updates
   useRealtime({
     channels:[roomId],
     events:["chat.message","chat.destroy"],
-    onData:({event})=>{
+    onData:({event, data})=>{
       if(event==="chat.message"){
-        refetch()
+        // FIX: Update query cache directly without refetch
+        queryClient.setQueryData(["messages", roomId], (old: any) => {
+          const exists = old?.messages.some((m: any) => m.id === data.id)
+          if (exists) return old
+          return {
+            messages: [...(old?.messages || []).filter((m: any) => !m.id.startsWith('temp-')), data]
+          }
+        })
       }
       if(event==="chat.destroy"){
         router.push("/?destroyed=true")
@@ -102,6 +160,31 @@ const Page =() => {
     setTimeout(() => {
       setCopyStatus("Copy")
     }, 2000);
+  }
+
+  // FIX: Prevent duplicate submissions with debouncing
+  const handleSendMessage = () => {
+    const now = Date.now()
+    
+    // FIX: Prevent spam with 500ms cooldown
+    if (isSubmitting || now - lastSubmitTime.current < 500) {
+      return
+    }
+    
+    const trimmedInput = input.trim()
+    if (!trimmedInput) return
+    
+    lastSubmitTime.current = now
+    setIsSubmitting(true)
+    sendMessage({text: trimmedInput})
+  }
+
+  // FIX: Prevent Enter key spam
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
   }
 
   return( 
@@ -334,21 +417,16 @@ const Page =() => {
               </div>
             </div>
 
-            {/* Premium Input Field */}
+            {/* Premium Input Field - FIX: Added onKeyDown handler and removed autoFocus */}
             <input 
               ref={inputRef}
-              autoFocus 
               value={input} 
               onChange={(e) => setInput(e.target.value)} 
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && input.trim()) {
-                  sendMessage({text: input})
-                  inputRef.current?.focus()
-                }
-              }} 
+              onKeyDown={handleKeyDown}
+              disabled={isSubmitting}
               type="text" 
               placeholder="Type your message..." 
-              className="w-full bg-gradient-to-br from-neutral-900/80 to-neutral-950/80 border-2 border-neutral-800/70 focus:border-cyan-600/60 focus:bg-neutral-900/90 focus:outline-none transition-all duration-300 text-neutral-50 placeholder:text-neutral-500 placeholder:font-medium py-3 md:py-4 pl-14 md:pl-16 pr-14 md:pr-16 text-sm md:text-base rounded-[28px] hover:border-neutral-700/80 shadow-xl focus:shadow-2xl focus:shadow-cyan-900/20 font-medium backdrop-blur-sm"
+              className="w-full bg-gradient-to-br from-neutral-900/80 to-neutral-950/80 border-2 border-neutral-800/70 focus:border-cyan-600/60 focus:bg-neutral-900/90 focus:outline-none transition-all duration-300 text-neutral-50 placeholder:text-neutral-500 placeholder:font-medium py-3 md:py-4 pl-14 md:pl-16 pr-14 md:pr-16 text-sm md:text-base rounded-[28px] hover:border-neutral-700/80 shadow-xl focus:shadow-2xl focus:shadow-cyan-900/20 font-medium backdrop-blur-sm disabled:opacity-50"
             />
 
             {/* Enhanced Character Count */}
@@ -362,13 +440,10 @@ const Page =() => {
           </div>
         </div>
         
-        {/* Premium Send Button */}
+        {/* Premium Send Button - FIX: Updated onClick handler */}
         <button 
-          onClick={() => {
-            sendMessage({text: input})
-            inputRef.current?.focus()
-          }} 
-          disabled={!input.trim() || isPending} 
+          onClick={handleSendMessage}
+          disabled={!input.trim() || isSubmitting} 
           className="group/btn relative overflow-hidden bg-gradient-to-br from-cyan-600 via-cyan-600 to-teal-600 hover:from-cyan-500 hover:via-cyan-500 hover:to-teal-500 p-3.5 md:p-4 rounded-full text-white font-bold transition-all duration-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xl shadow-cyan-900/60 hover:shadow-cyan-800/80 hover:scale-110 active:scale-95 disabled:hover:scale-100 border-2 border-cyan-500/40 hover:border-cyan-400/60"
         >
           {/* Multiple Animation Layers */}
@@ -377,9 +452,16 @@ const Page =() => {
           <div className="absolute inset-0 rounded-full bg-cyan-400/0 group-hover/btn:bg-cyan-400/20 group-hover/btn:animate-pulse transition-all duration-500"></div>
           
           {/* Send Icon */}
-          <svg className="relative w-5 h-5 md:w-6 md:h-6 group-hover/btn:rotate-45 group-hover/btn:scale-110 transition-all duration-500 ease-out drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
+          {isSubmitting ? (
+            <svg className="relative w-5 h-5 md:w-6 md:h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <svg className="relative w-5 h-5 md:w-6 md:h-6 group-hover/btn:rotate-45 group-hover/btn:scale-110 transition-all duration-500 ease-out drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          )}
         </button>
       </div>
 
@@ -416,11 +498,6 @@ const Page =() => {
     </div>
   </footer>
 </main>
-
-
-
-
-
 )
 }
 
