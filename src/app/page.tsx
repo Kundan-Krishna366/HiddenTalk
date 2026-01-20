@@ -72,7 +72,7 @@ function Home() {
 
           <div className="space-y-6 text-center">
             <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-500">
-              Speak Freely.
+              HiddenTalk.
             </h1>
             <p className="text-zinc-400 text-sm leading-relaxed max-w-sm mx-auto">
               Ephemeral messaging. No logs, no tracking, complete anonymity for sensitive communications.
