@@ -22,8 +22,11 @@ function Home() {
   const {mutate: createRoom, isPending} = useMutation({
     mutationFn: async() => {
       const res = await api.room.post()
-      if(res.status === 200){
-        router.push(`/room/${res.data?.roomId}`)
+      return res
+    },
+    onSuccess: (res) => {
+      if(res.status === 200 && res.data?.roomId){
+        router.push(`/room/${res.data.roomId}`)
       }
     }
   })
