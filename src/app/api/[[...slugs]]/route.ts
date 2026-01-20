@@ -5,10 +5,11 @@ import { authMiddleware } from './auth'
 import { z } from 'zod'
 import { Message, realtime } from '@/lib/realtime'
 
+export const runtime = 'edge'
+
 const rooms = new Elysia({prefix:"/room"}).post("/", async()=>{
   const roomId = nanoid()
 
-  // FIX: Run operations in parallel
   await Promise.all([
     redis.hset(`meta:${roomId}`,{
       connected:[],
@@ -26,10 +27,8 @@ const rooms = new Elysia({prefix:"/room"}).post("/", async()=>{
     roomId: z.string()
   })
 }).delete("/", async ({auth}) => {
-  // FIX: Remove duplicate await inside Promise.all
   await Promise.all([
     realtime.channel(auth.roomId).emit("chat.destroy",{isDestroyed:true}),
-    redis.del(auth.roomId),
     redis.del(`meta:${auth.roomId}`),
     redis.del(`messages:${auth.roomId}`)
   ])
@@ -44,8 +43,9 @@ const messages = new Elysia({prefix:"/messages"})
   const {sender,text} = body
   const {roomId} = auth
   
-  const roomExists = await redis.exists(`meta:${roomId}`)
-  if(!roomExists){
+  const remaining = await redis.ttl(`meta:${roomId}`)
+  
+  if(remaining === -2){
     throw new Error("Room does not exist")
   }
 
@@ -57,17 +57,12 @@ const messages = new Elysia({prefix:"/messages"})
     roomId
   }
 
-  // FIX: Get TTL first
-  const remaining = await redis.ttl(`meta:${roomId}`)
-  
-  // FIX: Run all operations in parallel for speed
   await Promise.all([
     redis.rpush(`messages:${roomId}`,{...message, token: auth.token}),
-    redis.expire(`messages:${roomId}`, remaining),
+    remaining > 0 ? redis.expire(`messages:${roomId}`, remaining) : null,
     realtime.channel(roomId).emit("chat.message", message)
   ])
   
-  // FIX: Return message for optimistic updates
   return { message }
 },
 {
