@@ -9,7 +9,7 @@ Built using **Next.js, ElysiaJS, Redis (Upstash), and Vercel**.
 
 ## Live Demo
 
-https://hiddentalk.vercel.app/
+https://hiddentalk.kundankrishna.engineer/
 
 ---
 
