@@ -1,4 +1,4 @@
-# 🔐 HiddenTalk
+#  HiddenTalk
 
 HiddenTalk is a **privacy-focused, real-time anonymous chat application** where conversations disappear after the session ends.  
 No sign-up. No login. Just share a link and chat.
